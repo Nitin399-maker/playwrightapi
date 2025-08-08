@@ -3,10 +3,13 @@ import { chromium, firefox, webkit } from 'playwright';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
+import config from './config.json' assert { type: 'json' };
+
 const app = express();
 const PORT = 3000;
 app.use(express.json());
 const browsers = {chromium, firefox, webkit };
+
 async function loginToLinkedIn(page, email, password) {
   try {
     await page.goto('https://www.linkedin.com/login');
@@ -21,6 +24,7 @@ async function loginToLinkedIn(page, email, password) {
     return false;
   }
 }
+
 async function searchPeople(page, searchQuery) {
   try {
     const searchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(searchQuery)}`;
@@ -42,35 +46,27 @@ async function searchPeople(page, searchQuery) {
   }
   catch (error) { console.error('❌ Search failed:', error.message);  return false;}
 }
+
 async function extractProfileUrlsFromPage(page) {
   try {
     await page.waitForTimeout(2000);
-
     const profileUrls = await page.evaluate(() => {
       const links = Array.from(document.querySelectorAll('a[href*="/in/"]'));
-
       return links
-        .map(link => link.href.split('?')[0]) // remove query params like ?miniProfileUrn
+        .map(link => link.href.split('?')[0]) 
         .filter(url => {
           const pathname = new URL(url).pathname;
-          
-          // Must match /in/username or /in/username/
           const publicProfilePattern = /^\/in\/[a-zA-Z0-9\-]+\/?$/;
-
           return (
-            publicProfilePattern.test(pathname) &&             // clean public slug
-            !url.includes('miniProfileUrn') &&                // exclude mutuals with query
-            !pathname.includes('ACoA')                        // exclude URN-style IDs
+            publicProfilePattern.test(pathname) &&            
+            !url.includes('miniProfileUrn') &&               
+            !pathname.includes('ACoA')                       
           );
-        })
-        .filter((url, index, self) => self.indexOf(url) === index); // remove duplicates
+        }).filter((url, index, self) => self.indexOf(url) === index); 
     });
-
     return profileUrls;
-  } catch (error) {
-    console.error('❌ Failed to extract profile URLs:', error.message);
-    return [];
-  }
+  } 
+  catch (error) { console.error('❌ Failed to extract profile URLs:', error.message); return []; }
 }
 
 
@@ -78,48 +74,34 @@ async function goToNextPage(page) {
   try {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(2000);
-
     try {
       await page.waitForSelector('.artdeco-pagination', { timeout: 5000 });
-    } catch {
-      return false;
-    }
-
+    } 
+    catch { return false; }
     const nextSelectors = [
       'button.artdeco-pagination__button--next[aria-label="Next"]:not([disabled])',
       'button.artdeco-button--tertiary.artdeco-pagination__button--next',
       'button:has(span.artdeco-button__text:has-text("Next"))'
     ];
-
     for (const selector of nextSelectors) {
       try {
         const nextButton = await page.$(selector);
         if (!nextButton || !(await nextButton.isVisible())) continue;
-
         const buttonState = await nextButton.evaluate(button => ({
           disabled: button.disabled,
           ariaDisabled: button.getAttribute('aria-disabled'),
           buttonText: button.querySelector('.artdeco-button__text')?.innerText?.trim()
         }));
-
-        const isClickable = !buttonState.disabled &&
-                            buttonState.ariaDisabled !== 'true' &&
+        const isClickable = !buttonState.disabled && buttonState.ariaDisabled !== 'true' &&
                             buttonState.buttonText === 'Next';
         if (!isClickable) continue;
-
         const currentUrl = page.url();
         const currentPageMatch = currentUrl.match(/&page=(\d+)/);
         const currentPage = currentPageMatch ? parseInt(currentPageMatch[1]) : 1;
-
         await nextButton.scrollIntoViewIfNeeded();
         await page.waitForTimeout(500);
-
-        try {
-          await nextButton.click();
-        } catch {
-          await nextButton.click({ force: true });
-        }
-
+        try {  await nextButton.click(); }
+        catch { await nextButton.click({ force: true }); }
         try {
           await Promise.race([
             page.waitForURL(new RegExp(`page=${currentPage + 1}`), { timeout: 8000 }),
@@ -127,28 +109,24 @@ async function goToNextPage(page) {
             page.waitForTimeout(4000)
           ]);
         } catch {}
-
         const newUrl = page.url();
         const newPageMatch = newUrl.match(/&page=(\d+)/);
         const newPage = newPageMatch ? parseInt(newPageMatch[1]) : 1;
-
         if (newPage > currentPage || newUrl !== currentUrl) {
           return true;
         }
       } catch {}
     }
     return false;
-  } catch {
-    return false;
   }
+  catch { return false; }
 }
 
-
-async function extractProfileData(page, profileUrl) {
+export async function extractProfileData(page, profileUrl) {
   try {
-    await page.goto(profileUrl);
+    await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
-    const nameSelectors = ['h1', '.text-heading-xlarge', '.pv-text-details__left-panel h1'];
+    const nameSelectors = config.selectors.name;
     let nameLoaded = false;
     for (const selector of nameSelectors) {
       try {
@@ -156,44 +134,43 @@ async function extractProfileData(page, profileUrl) {
         nameLoaded = true;
         break;
       } 
-      catch (e) { continue; }
+      catch (_) { continue;  }
     }
-    if (!nameLoaded) { throw new Error('Profile did not load properly'); }
-    const profileData = await page.evaluate(() => {
+    if (!nameLoaded) { throw new Error('Profile did not load properly');}
+    const profileData = await page.evaluate((selectors) => {
       const getText = (selectors) => {
-        if (typeof selectors === 'string') {   selectors = [selectors];  }
+        if (typeof selectors === 'string') selectors = [selectors];
         for (const selector of selectors) {
           const element = document.querySelector(selector);
-          if (element && element.innerText) {
-            return element.innerText.trim();
-          }
+          if (element?.innerText) return element.innerText.trim();
         }
         return '';
       };
+
       const getMultipleTexts = (selectors) => {
-        if (typeof selectors === 'string') {   selectors = [selectors];  }
+        if (typeof selectors === 'string') selectors = [selectors];
         for (const selector of selectors) {
           const elements = document.querySelectorAll(selector);
           if (elements.length > 0) {
             return Array.from(elements)
-              .map(el => el.innerText.trim()).filter(text => text.length > 0).join(' | ');
+              .map(el => el.innerText.trim())
+              .filter(text => text.length > 0)
+              .join(' | ');
           }
         }
         return '';
       };
-      
       return {
-        name: getText(['h1', '.text-heading-xlarge', '.pv-text-details__left-panel h1', '.pv-top-card--list li:first-child']),
-        headline: getText(['.text-body-medium.break-words', '.pv-text-details__left-panel .text-body-medium', '.pv-top-card--list li:nth-child(2)', '.top-card-layout__headline']),
-        location: getText(['.text-body-small.inline.t-black--light.break-words', '.pv-text-details__left-panel .text-body-small', '.pv-top-card--list-bullet li', '.top-card-layout__first-subline']),
-        about: getText(['#about ~ div .pv-shared-text-with-see-more', '.pv-about-section .pv-about__summary-text', '[data-section="summary"] .pv-about__summary-text']).replace('About', '').trim(),
-        experience: getMultipleTexts(['#experience ~ div .t-bold', '.pv-profile-section.experience .pv-entity__summary-info h3', '[data-section="experience"] .pv-entity__summary-info h3']),
-        education: getMultipleTexts(['#education ~ div .t-bold', '.pv-profile-section.education .pv-entity__summary-info h3', '[data-section="education"] .pv-entity__summary-info h3']),
-        skills: getMultipleTexts(['#skills ~ div .hoverable-link-text', '.pv-skill-category-entity__name', '[data-section="skills"] .pv-skill-category-entity__name']),
-        connections: getText(['.t-black--light.t-normal', '.pv-top-card--list-bullet', '.top-card-layout__first-subline']),
+        name: getText(selectors.name), headline: getText(selectors.headline),
+        location: getText(selectors.location),
+        about: getText(selectors.about).replace(/^About/i, '').trim(),
+        experience: getMultipleTexts(selectors.experience),
+        education: getMultipleTexts(selectors.education),
+        skills: getMultipleTexts(selectors.skills),
+        connections: getText(selectors.connections),
         profileUrl: window.location.href
       };
-    }); 
+    }, config.selectors);
     console.log(`✅ Extracted data for: ${profileData.name || 'Unknown'}`);
     return profileData;
   } catch (error) {
@@ -201,21 +178,11 @@ async function extractProfileData(page, profileUrl) {
     return { name: 'N/A', headline: 'N/A', location: 'N/A', about: 'N/A', experience: 'N/A', education: 'N/A', skills: 'N/A', connections: 'N/A', profileUrl: profileUrl, error: error.message };
   }
 }
+
 async function createExcelFile(profiles, filename) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('LinkedIn Profiles');
-  worksheet.columns = [
-    { header: 'Name', key: 'name', width: 30 },
-    { header: 'Headline', key: 'headline', width: 50 },
-    { header: 'Location', key: 'location', width: 30 },
-    { header: 'About', key: 'about', width: 80 },
-    { header: 'Experience', key: 'experience', width: 80 },
-    { header: 'Education', key: 'education', width: 50 },
-    { header: 'Skills', key: 'skills', width: 60 },
-    { header: 'Connections', key: 'connections', width: 20 },
-    { header: 'Profile URL', key: 'profileUrl', width: 50 },
-    { header: 'Error', key: 'error', width: 30 }
-  ];
+  worksheet.columns = config.worksheetColumns;
   worksheet.addRows(profiles);
   worksheet.getRow(1).font = { bold: true };
   worksheet.getRow(1).fill = {
