@@ -3,22 +3,22 @@
     "name": ["h1", ".text-heading-xlarge", ".pv-text-details__left-panel h1", ".pv-top-card--list li:first-child"],
     "headline": [".text-body-medium.break-words", ".pv-text-details__left-panel .text-body-medium", ".pv-top-card--list li:nth-child(2)", ".top-card-layout__headline"],
     "location": [".text-body-small.inline.t-black--light.break-words", ".pv-text-details__left-panel .text-body-small", ".pv-top-card--list-bullet li", ".top-card-layout__first-subline"],
-    "about": ["#about ~ div .pv-shared-text-with-see-more", ".pv-about-section .pv-about__summary-text", "[data-section=\"summary\"] .pv-about__summary-text"],
-    "experience": ["#experience ~ div .t-bold", ".pv-profile-section.experience .pv-entity__summary-info h3", "[data-section=\"experience\"] .pv-entity__summary-info h3"],
-    "education": ["#education ~ div .t-bold", ".pv-profile-section.education .pv-entity__summary-info h3", "[data-section=\"education\"] .pv-entity__summary-info h3"],
-    "skills": ["#skills ~ div .hoverable-link-text", ".pv-skill-category-entity__name", "[data-section=\"skills\"] .pv-skill-category-entity__name"],
-    "connections": [".t-black--light.t-normal", ".pv-top-card--list-bullet", ".top-card-layout__first-subline"]
+    "about": [
+      "#about ~ div .YXcUYmffgdZTMgcnQLwWlwNaqlwJdBwYyRPduRY span[aria-hidden=\"true\"]",
+      "#about ~ div .VzgGKayZCPilfebXTEdUXhiDhNJUJIgltoA span[aria-hidden=\"true\"]",
+      ".artdeco-card .YXcUYmffgdZTMgcnQLwWlwNaqlwJdBwYyRPduRY span[aria-hidden=\"true\"]",
+      "#about ~ div .pv-shared-text-with-see-more", 
+      ".pv-about-section .pv-about__summary-text", 
+      "[data-section=\"summary\"] .pv-about__summary-text"
+    ]
   },
   "worksheetColumns": [
     { "header": "Name", "key": "name", "width": 30 },
     { "header": "Headline", "key": "headline", "width": 50 },
     { "header": "Location", "key": "location", "width": 30 },
     { "header": "About", "key": "about", "width": 80 },
-    { "header": "Experience", "key": "experience", "width": 80 },
-    { "header": "Education", "key": "education", "width": 50 },
-    { "header": "Skills", "key": "skills", "width": 60 },
-    { "header": "Connections", "key": "connections", "width": 20 },
     { "header": "Profile URL", "key": "profileUrl", "width": 50 },
+    { "header": "Extracted At", "key": "extractedAt", "width": 20 },
     { "header": "Error", "key": "error", "width": 30 }
   ]
 }
