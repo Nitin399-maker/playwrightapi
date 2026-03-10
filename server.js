@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from "url";
-import config from './config.json' assert { type: 'json' };
+import config from './config.json' with { type: 'json' };
 
 const app = express();
 const PORT = 3000;
@@ -39,30 +39,57 @@ async function openLinkedInForManualLogin(page, sessionId) {
 async function searchPeople(page, searchQuery) {
   try {
     const searchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(searchQuery)}`;
-    await page.goto(searchUrl);
-    const selectors = ['.search-results-container', '[data-test-id="search-results"]',
-                       '.search-result', '.reusable-search__result-container'
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+
+    const selectors = [
+      '.search-results-container',
+      '[data-test-id="search-results"]',
+      '.search-result',
+      '.reusable-search__result-container',
+      '[data-view-name*="search"]',
+      // newer LinkedIn selectors
+      '.scaffold-layout__list-container',
+      '.artdeco-list',
+      'ul.reusable-search__entity-result-list',
+      '[data-view-name="search-entity-result-universal-template"]',
+      'a[data-view-name*="search-result-lockup-title"]',
+      // broad fallback — any result card
+      '.entity-result',
+      '.search-results'
     ];
+
     let loaded = false;
     for (const selector of selectors) {
       try {
-        await page.waitForSelector(selector, { timeout: 5000 });
+        await page.waitForSelector(selector, { timeout: 4000 });
         loaded = true;
         break;
-      } 
-      catch (e) { continue; } }
+      } catch (e) { continue; }
+    }
+
+    if (!loaded) {
+      // Final fallback: check that the page URL still contains our search and has meaningful content
+      const currentUrl = page.url();
+      const hasContent = await page.evaluate(() => document.body.innerText.length > 200);
+      if (currentUrl.includes('/search/results/') && hasContent) {
+        console.log('⚠️ Could not find known selectors, but search page appears loaded. Continuing...');
+        loaded = true;
+      }
+    }
+
     if (!loaded) { throw new Error('Search results did not load properly'); }
     console.log(`🔍 Searching for: ${searchQuery}`);
     return true;
   }
-  catch (error) { console.error('❌ Search failed:', error.message);  return false;}
+  catch (error) { console.error('❌ Search failed:', error.message); return false; }
 }
 
 async function extractProfileUrlsFromPage(page) {
   try {
     await page.waitForTimeout(2000);
     const profileUrls = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a[href*="/in/"]'));
+      const links = Array.from(document.querySelectorAll('a[data-view-name*="search-result-lockup-title"]'));
       return links
         .map(link => link.href.split('?')[0]) 
         .filter(url => {
